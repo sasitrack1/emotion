@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Emotion Detection</title>
+</head>
+<body>
+
+    <h2>Emotion Detection</h2>
+
+    <video id="video" autoplay playsinline></video>
+    <button id="capture">Capture Image</button>
+    <canvas id="canvas" style="display:none;"></canvas>
+    <img id="photo" alt="Captured Image">
+    <p id="result"></p>
+
+    <script type="module">
+        // Import Firebase modules
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.3.0/firebase-app.js";
+        import { getFirestore, collection, addDoc } from "https://www.gstatic.com/firebasejs/11.3.0/firebase-firestore.js";
+
+        // Firebase configuration
+        const firebaseConfig = {
+            apiKey: "AIzaSyBiguQL27a6ZLuzsljfM-coyVpVWN8Q5Po",
+            authDomain: "song-recommandation.firebaseapp.com",
+            projectId: "song-recommandation",
+            storageBucket: "song-recommandation.appspot.com",
+            messagingSenderId: "569580324809",
+            appId: "1:569580324809:web:5a9f3cb90ac756698a4a18",
+            measurementId: "G-2VR5Z2EEP4"
+        };
+
+        // Initialize Firebase
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+
+        // Function to save emotion data to Firestore
+        async function saveEmotionToFirestore(emotion) {
+            try {
+                const docRef = await addDoc(collection(db, "emotions"), {
+                    emotion: emotion,
+                    timestamp: new Date().toISOString()
+                });
+                console.log("Emotion saved:", docRef.id);
+            } catch (error) {
+                console.error("Error saving emotion:", error);
+            }
+        }
+
+        // Start the camera feed
+        async function startCamera() {
+            try {
+                const video = document.getElementById("video");
+                const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+                video.srcObject = stream;
+            } catch (error) {
+                console.error("Camera access denied:", error);
+                alert("Please allow camera access to use this feature.");
+            }
+        }
+
+        // Run script after DOM is loaded
+        document.addEventListener("DOMContentLoaded", () => {
+            startCamera();  // Start the camera on page load
+
+            const captureButton = document.getElementById("capture");
+            const video = document.getElementById("video");
+            const canvas = document.getElementById("canvas");
+            const photo = document.getElementById("photo");
+            const resultText = document.getElementById("result");
+
+            captureButton.addEventListener("click", () => {
+                const context = canvas.getContext("2d");
+
+                if (!video.videoWidth || !video.videoHeight) {
+                    console.error("Video dimensions are not available.");
+                    return;
+                }
+
+                // Capture image
+                canvas.width = video.videoWidth;
+                canvas.height = video.videoHeight;
+                context.drawImage(video, 0, 0, canvas.width, canvas.height);
+                const imageData = canvas.toDataURL("image/jpeg");
+
+                // Display captured image
+                photo.src = imageData;
+
+                // Send image to backend for analysis
+                fetch("/analyze", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ image: imageData })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (!data.emotion) throw new Error("No emotion detected");
+                    resultText.innerText = "Detected Emotion: " + data.emotion;
+                    saveEmotionToFirestore(data.emotion);
+                })
+                .catch(error => console.error("Emotion detection error:", error));
+            });
+        });
+    </script>
+
+</body>
+</html>
